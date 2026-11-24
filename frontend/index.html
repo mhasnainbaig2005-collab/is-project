@@ -1,0 +1,138 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Diffie–Hellman Key Exchange Visualizer</title>
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <header class="topbar">
+    <div class="brand">
+      <svg class="logo" viewBox="0 0 48 48" aria-hidden="true"><circle cx="15" cy="24" r="10" fill="none" stroke="var(--alice)" stroke-width="3"/><circle cx="33" cy="24" r="10" fill="none" stroke="var(--bob)" stroke-width="3"/><path d="M24 15.5a10 10 0 0 1 0 17a10 10 0 0 1 0-17z" fill="var(--shared)"/></svg>
+      <div>
+        <h1>Diffie–Hellman Key Exchange</h1>
+        <p class="subtitle">Agree on a secret in public, then watch an attacker try to break in.</p>
+      </div>
+    </div>
+    <div class="controls">
+      <select id="presetSelect" aria-label="Prime parameter preset">
+        <option value="educational_tiny">Tiny (p = 23, g = 5)</option>
+        <option value="educational_medium">Medium (17-bit prime)</option>
+        <option value="production_2048">RFC 3526 Group 14 (2048-bit)</option>
+      </select>
+      <label class="toggle"><input type="checkbox" id="mitmToggle" /><span>Mallory MITM attack</span></label>
+      <label class="toggle"><input type="checkbox" id="authToggle" /><span>Ed25519 signatures</span></label>
+      <button id="handshakeBtn" class="btn-primary">Run key exchange</button>
+      <button id="tourBtn" class="btn-ghost">Present</button>
+    </div>
+  </header>
+
+  <section class="params-bar">
+    <span>Prime p <code id="paramP">—</code></span>
+    <span>Generator g <code id="paramG">—</code></span>
+    <span>Channel <span id="statusBadge" class="badge">IDLE</span></span>
+  </section>
+
+  <div id="verdict" class="verdict" role="status" hidden></div>
+
+  <section class="stage" aria-label="Network wire animation">
+    <div class="node alice-c">Alice</div>
+    <div class="lane" id="lane">
+      <div class="wire"></div>
+      <div class="mal-node" id="malNode" hidden>Mallory</div>
+    </div>
+    <div class="node bob-c">Bob</div>
+  </section>
+
+  <main class="grid-3">
+    <section class="card alice-c">
+      <div class="card-header"><h2>Alice</h2><span class="role-tag">Initiator</span></div>
+      <div class="kv-list">
+        <div class="kv"><label>Private key a (secret)</label><code id="alicePriv" class="secret">—</code></div>
+        <div class="kv"><label>Public key A = gᵃ mod p</label><code id="alicePub">—</code></div>
+        <div class="kv"><label>Public key received</label><code id="aliceRecv">—</code></div>
+        <div class="kv"><label>Shared secret S</label><code id="aliceSecret" class="highlight">—</code></div>
+        <div class="kv"><label>HKDF-derived AES-256 key</label><code id="aliceAes" class="mono-small">—</code></div>
+      </div>
+      <div class="message-box">
+        <label for="plaintextInput">Send an encrypted message (AES-256-GCM)</label>
+        <input type="text" id="plaintextInput" value="Meet at IIUI Lab 4 at 10:00 AM" />
+        <button id="sendBtn" class="btn-cyan" disabled>Encrypt and send</button>
+      </div>
+    </section>
+
+    <section class="card wire-card">
+      <div class="card-header"><h2>Public channel</h2><span class="role-tag danger">Untrusted</span></div>
+      <div class="log-box">
+        <label>Protocol trace</label>
+        <ul id="eventLog" class="event-list"><li>Press <strong>Run key exchange</strong> to start.</li></ul>
+      </div>
+      <div class="mallory-box" id="malloryPanel" hidden>
+        <label class="danger-text">Mallory's session</label>
+        <div class="kv-compact">
+          <span>Her public key M <code id="malloryPub">—</code></span>
+          <span>Secret with Alice S₁ <code id="mallorySecA">—</code></span>
+          <span>Secret with Bob S₂ <code id="mallorySecB">—</code></span>
+        </div>
+        <input type="text" id="tamperInput" placeholder="Optional: text Mallory forwards to Bob instead" />
+      </div>
+      <div class="wire-packet">
+        <label>Captured ciphertext (hex)</label>
+        <code id="wireCiphertext" class="mono-small">No packet sent yet.</code>
+        <p id="malloryStolen" class="stolen-note" hidden></p>
+      </div>
+      <div class="dlp-box">
+        <button id="crackBtn" class="btn-outline" disabled>Try to brute-force Alice's key</button>
+        <div class="crack-meter" id="crackMeter" hidden><i id="crackFill"></i></div>
+        <p id="crackResult" class="crack-output"></p>
+      </div>
+    </section>
+
+    <section class="card bob-c">
+      <div class="card-header"><h2>Bob</h2><span class="role-tag">Responder</span></div>
+      <div class="kv-list">
+        <div class="kv"><label>Private key b (secret)</label><code id="bobPriv" class="secret">—</code></div>
+        <div class="kv"><label>Public key B = gᵇ mod p</label><code id="bobPub">—</code></div>
+        <div class="kv"><label>Public key received</label><code id="bobRecv">—</code></div>
+        <div class="kv"><label>Shared secret S</label><code id="bobSecret" class="highlight">—</code></div>
+        <div class="kv"><label>HKDF-derived AES-256 key</label><code id="bobAes" class="mono-small">—</code></div>
+      </div>
+      <div class="message-box">
+        <label>Decrypted at Bob's terminal</label>
+        <div id="bobDecrypted" class="decrypted-output">Waiting for a message…</div>
+      </div>
+    </section>
+  </main>
+
+  <section class="card lab">
+    <div class="card-header"><h2>Attack and defence lab</h2><span class="role-tag">Run a key exchange first</span></div>
+    <div class="lab-grid">
+      <div class="lab-item"><h3>Tamper test</h3><p>Flip one bit of a ciphertext in transit. AES-GCM's authentication tag should catch it.</p>
+        <button id="tamperBtn" class="btn-outline">Flip a bit</button><div id="tamperOut" class="lab-out"></div></div>
+      <div class="lab-item"><h3>Brute force vs baby-step giant-step</h3><p>A smarter attack needs about √p steps instead of p.</p>
+        <button id="bsgsBtn" class="btn-outline">Race the attacks</button><div id="bsgsOut" class="lab-out"></div></div>
+      <div class="lab-item"><h3>Forward secrecy</h3><p>Three sessions with fresh keys. Steal the newest key and see what leaks.</p>
+        <button id="fsBtn" class="btn-outline">Steal a session key</button><div id="fsOut" class="lab-out"></div></div>
+    </div>
+  </section>
+
+  <section class="card math" id="mathPanel">
+    <div class="card-header"><h2>The math, with real numbers</h2><span class="role-tag">Live</span></div>
+    <div id="mathBody" class="math-body">Run a key exchange on the tiny or medium prime to see each modular exponentiation worked out.</div>
+  </section>
+
+  <footer class="foot">
+    <strong>Information Security · BSSE F24 · Group 8</strong>
+    <span>Muhammad Hasnain Baig · Habib Ullah · Iqbal Hassan Tariq Murtaza · Muhammad Nasrullah Malik</span>
+  </footer>
+  <aside id="tour" class="tour" hidden aria-live="polite">
+    <div class="tour-meta"><span id="tourStep"></span><button id="tourExit" class="btn-ghost">Exit</button></div>
+    <h3 id="tourTitle"></h3>
+    <p id="tourText"></p>
+    <div class="tour-nav"><button id="tourBack" class="btn-ghost">Back</button><button id="tourNext" class="btn-primary">Next</button></div>
+  </aside>
+  <script src="app.js"></script>
+  <script src="tour.js"></script>
+</body>
+</html>
