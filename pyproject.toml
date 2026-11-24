@@ -1,0 +1,4 @@
+@"
+[tool.vercel]
+entrypoint = "backend.main:app"
+"@ | Set-Content -Path pyproject.toml -Encoding utf8
